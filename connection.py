@@ -1,5 +1,6 @@
 import requests
-API_KEY = "AIzaSyC8QfyRMNra6Nk-5ZiujACMvlTseGL7jEE"
+import streamlit as st
+API_KEY = st.secrets["GEMINI_API_KEY"]
 
 
 def ask_ai(prompt: str) -> str:
