@@ -17,8 +17,6 @@ def safe_json_parse(result: str, fallback_snippet: str):
         seen = set()
 
         for item in data.get("issues", []):
-            issue_type = item.get("type", "Grammar").strip()
-            location = item.get("location", "Transcript").strip()
             snippet = item.get("snippet", "").strip()
             issue = item.get("issue", "").strip()
             suggestion = item.get("suggestion", "").strip()
@@ -30,17 +28,17 @@ def safe_json_parse(result: str, fallback_snippet: str):
             if not snippet or snippet in {"...", ".", ".."}:
                 snippet = fallback_snippet[:120]
 
-            key = (issue_type, snippet, issue)
+            key = (snippet.lower(), issue.lower())
             if key in seen:
                 continue
             seen.add(key)
 
             rows.append({
-                "Type": issue_type,
-                "Location": location,
+                "Type": "Grammar",
+                "Location": "Transcript",
                 "Snippet": snippet[:120],
                 "Issue": issue,
-                "Suggestion": suggestion if suggestion else "No suggestion returned",
+                "Suggestion": suggestion if suggestion else "Review grammar manually.",
                 "Severity": severity
             })
 
@@ -58,25 +56,32 @@ def safe_json_parse(result: str, fallback_snippet: str):
 
 
 def check_grammar(transcript: str):
-    text_part = transcript[:300]
+    text_part = transcript[:600]
 
     prompt = f"""
-You are reviewing a video transcript for grammar only.
+You are reviewing a transcript for grammar issues only.
 
 Your task:
-- identify all clear grammatical mistakes
-- do NOT check hook
-- do NOT check storytelling
-- do NOT check spelling/typos unless it directly affects grammar
-- do NOT flag casual spoken English unless it is clearly grammatically wrong in subtitles/captions
-- consider context before flagging an issue
+- identify only clear grammar mistakes
+- do NOT flag spelling or typo issues
+- do NOT flag storytelling issues
+- do NOT flag hook issues
+- do NOT flag names, brand names, or place names
+- be careful with spoken English and accented English
+- only report grammar issues that are clearly wrong in transcript/caption form
+
+Examples of grammar issues:
+- subject-verb disagreement
+- incorrect tense usage
+- missing function words that make the sentence grammatically broken
+- sentence structure that is clearly grammatically incorrect
 
 IMPORTANT:
-- Each issue must point to an exact phrase copied from the transcript.
-- Do NOT use "..." as a snippet.
-- Do NOT return generic statements.
-- Return ONLY JSON.
-- Do NOT include text before or after JSON.
+- Return ONLY valid JSON
+- Do NOT include text before or after JSON
+- The snippet must be an exact phrase copied from the transcript
+- Do NOT use "..." as a snippet
+- Do not report more than necessary; only include real grammar issues
 
 Return in this format:
 {{
@@ -85,8 +90,8 @@ Return in this format:
       "type": "Grammar",
       "location": "Transcript",
       "snippet": "exact phrase",
-      "issue": "specific grammar issue",
-      "suggestion": "specific corrected version",
+      "issue": "specific grammar problem",
+      "suggestion": "corrected version or improvement",
       "severity": "Medium"
     }}
   ]
