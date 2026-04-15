@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import requests
 import streamlit as st
 
-API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL") or st.secrets.get("OPENAI_MODEL", "gpt-4.1-mini")
 OPENAI_TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL") or st.secrets.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1")
