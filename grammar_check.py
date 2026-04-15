@@ -1,29 +1,46 @@
 import json
 from connection import ask_ai
 
+def _clean_text(text: str) -> str:
+    text = text.strip()
+
+    if text.startswith("```json"):
+        text = text[len("```json"):].strip()
+    elif text.startswith("```"):
+        text = text[len("```"):].strip()
+
+    if text.endswith("```"):
+        text = text[:-3].strip()
+
+    return text
+
 
 def safe_json_parse(result: str, fallback_snippet: str):
     try:
         start = result.find("{")
         end = result.rfind("}") + 1
 
-        if start == -1 or end == 0:
+        if start == -1 or end <= start:
             return []
 
-        result = result[start:end]
-        data = json.loads(result)
+        parsed_text = result[start:end]
+        data = json.loads(parsed_text)
 
         rows = []
         seen = set()
+        allowed_severities = {"Low", "Medium", "High"}
 
         for item in data.get("issues", []):
-            snippet = item.get("snippet", "").strip()
-            issue = item.get("issue", "").strip()
-            suggestion = item.get("suggestion", "").strip()
-            severity = item.get("severity", "Medium").strip()
+            snippet = str(item.get("snippet", "")).strip()
+            issue = str(item.get("issue", "")).strip()
+            suggestion = str(item.get("suggestion", "")).strip()
+            severity = str(item.get("severity", "Medium")).strip().title()
 
             if not issue:
                 continue
+
+            if severity not in allowed_severities:
+                severity = "Medium"
 
             if not snippet or snippet in {"...", ".", ".."}:
                 snippet = fallback_snippet[:120]
@@ -38,7 +55,7 @@ def safe_json_parse(result: str, fallback_snippet: str):
                 "Location": "Transcript",
                 "Snippet": snippet[:120],
                 "Issue": issue,
-                "Suggestion": suggestion if suggestion else "Review grammar manually.",
+                "Suggestion": suggestion if suggestion else "Review only if the sentence is genuinely unclear.",
                 "Severity": severity
             })
 
@@ -56,53 +73,71 @@ def safe_json_parse(result: str, fallback_snippet: str):
 
 
 def check_grammar(transcript: str):
-    text_part = transcript[:600]
+    text_part = transcript[:900]
 
     prompt = f"""
-You are reviewing a transcript for grammar issues only.
+You are reviewing a RAW interview transcript from a short-form video.
 
-Your task:
-- identify only clear grammar mistakes
-- do NOT flag spelling or typo issues
-- do NOT flag storytelling issues
-- do NOT flag hook issues
-- do NOT flag names, brand names, or place names
-- be careful with spoken English and accented English
-- only report grammar issues that are clearly wrong in transcript/caption form
+IMPORTANT CONTEXT:
+- This is spoken English, not written English.
+- The speaker may be from Singapore or Malaysia.
+- Natural conversational grammar is acceptable if the meaning is clear.
 
-Examples of grammar issues:
-- subject-verb disagreement
-- incorrect tense usage
-- missing function words that make the sentence grammatically broken
-- sentence structure that is clearly grammatically incorrect
+YOUR TASK:
+- ONLY flag grammar issues that make the sentence:
+  1. hard to understand, OR
+  2. clearly incorrect to the point it sounds broken
+
+DO NOT FLAG:
+- casual spoken phrasing
+- missing small words (e.g., "I go shop" instead of "I go to the shop")
+- common conversational grammar used in SG/MY speech
+- stylistic or informal speech
+- sentences that are understandable even if not perfect
+
+ONLY FLAG IF:
+- the listener might misunderstand the sentence
+- the grammar is noticeably broken or confusing
+
+EXAMPLES:
+
+DO NOT FLAG:
+- "Are you sell PS5?" → understandable in conversation
+- "every day I cycling" → acceptable spoken phrasing
+
+FLAG:
+- "He go yesterday tomorrow" → unclear meaning
+- "This thing is not make sense doing" → broken structure
 
 IMPORTANT:
 - Return ONLY valid JSON
-- Do NOT include text before or after JSON
-- The snippet must be an exact phrase copied from the transcript
-- Do NOT use "..." as a snippet
-- Do not report more than necessary; only include real grammar issues
+- Do NOT include any explanation outside JSON
+- Max 2–3 issues only (be selective)
+- The snippet must be exact text from transcript
+- Do NOT use "..."
 
-Return in this format:
+FORMAT:
 {{
   "issues": [
     {{
       "type": "Grammar",
       "location": "Transcript",
       "snippet": "exact phrase",
-      "issue": "specific grammar problem",
-      "suggestion": "corrected version or improvement",
-      "severity": "Medium"
+      "issue": "clear explanation of why it is confusing or broken",
+      "suggestion": "improved version",
+      "severity": "Low" | "Medium"
     }}
   ]
 }}
 
-If there are no grammar issues, return:
+If no real issues:
 {{"issues":[]}}
 
 Transcript:
 {text_part}
 """
+
+
 
     result = ask_ai(prompt).strip()
     return safe_json_parse(result, text_part)

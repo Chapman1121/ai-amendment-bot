@@ -1,6 +1,19 @@
 import json
 from connection import ask_ai
 
+def _clean_text(text: str) -> str:
+    text = text.strip()
+
+    if text.startswith("```json"):
+        text = text[len("```json"):].strip()
+    elif text.startswith("```"):
+        text = text[len("```"):].strip()
+
+    if text.endswith("```"):
+        text = text[:-3].strip()
+
+    return text
+
 
 def safe_json_parse(result: str, fallback_snippet: str):
     try:

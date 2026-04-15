@@ -1,5 +1,5 @@
+from connection import ask_ai_multimodal
 import json
-from connection import ask_ai
 
 
 def safe_json_parse(result: str, fallback_snippet: str):
@@ -10,38 +10,40 @@ def safe_json_parse(result: str, fallback_snippet: str):
         if start == -1 or end == 0:
             return []
 
-        result = result[start:end]
-        data = json.loads(result)
+        cleaned = result[start:end]
+        data = json.loads(cleaned)
 
         rows = []
         seen = set()
+        allowed_severities = {"Low", "Medium", "High"}
 
         for item in data.get("issues", []):
-            issue_type = item.get("type", "Hook").strip()
-            location = item.get("location", "Opening").strip()
-            snippet = item.get("snippet", "").strip()
-            issue = item.get("issue", "").strip()
-            suggestion = item.get("suggestion", "").strip()
-            severity = item.get("severity", "Low").strip()
+            snippet = str(item.get("snippet", "")).strip()
+            issue = str(item.get("issue", "")).strip()
+            suggestion = str(item.get("suggestion", "")).strip()
+            severity = str(item.get("severity", "Medium")).strip().title()
 
             if not issue:
                 continue
 
+            if severity not in allowed_severities:
+                severity = "Medium"
+
             if not snippet or snippet in {"...", ".", ".."}:
                 snippet = fallback_snippet[:120]
 
-            key = (issue_type, snippet, issue)
+            key = (snippet.lower(), issue.lower())
             if key in seen:
                 continue
             seen.add(key)
 
             rows.append({
-                "Type": issue_type,
-                "Location": location,
+                "Type": "Hook",
+                "Location": "Opening",
                 "Snippet": snippet[:120],
                 "Issue": issue,
-                "Suggestion": suggestion if suggestion else "No suggestion returned",
-                "Severity": severity
+                "Suggestion": suggestion if suggestion else "Make the opening more engaging or attention-grabbing.",
+                "Severity": severity,
             })
 
         return rows
@@ -52,47 +54,67 @@ def safe_json_parse(result: str, fallback_snippet: str):
             "Location": "Opening",
             "Snippet": fallback_snippet[:120],
             "Issue": "Could not parse AI output",
-            "Suggestion": result[:300],
-            "Severity": "Medium"
+            "Suggestion": result[:300] if result else "Review hook manually.",
+            "Severity": "Medium",
         }]
 
 
-def check_hook(transcript: str):
+def check_hook(transcript: str, frames: list, audio_base64: str):
     opening = transcript[:220]
 
     prompt = f"""
-You are reviewing the opening hook of a short-form video.
+You are reviewing the HOOK (first few seconds) of a short-form video.
 
-Your task is to decide whether the opening is strong enough to capture attention in the first few seconds.
+You must evaluate the hook using:
+1. spoken opening (transcript)
+2. opening visuals (frames)
+3. audio energy and delivery
+
+Your goal:
+Decide whether the opening is strong enough to capture attention.
 
 IMPORTANT:
 - Return at most 1 issue.
-- Only flag a problem if the hook is clearly weak, generic, boring, or not attention-grabbing.
-- The snippet must be an exact phrase copied from the transcript.
-- Do NOT use "..." as the snippet.
-- Return ONLY JSON.
-- Do NOT include text before or after JSON.
+- Only flag a problem if the hook is clearly weak.
+- Consider BOTH what is said and how it feels audiovisually.
+- If visuals/audio make the opening dull, you may flag it even if the words are okay.
+- If the opening is engaging overall, return no issues.
+- The snippet must be an exact phrase from the transcript.
+- Do NOT use "..." as a snippet.
+- Return ONLY valid JSON.
+- Do NOT give generic feedback.
+- Every issue must be tied to a specific phrase, moment, visual pattern, or audio problem.
+- Suggestions must be concrete and actionable.
+- Avoid vague phrases like "improve engagement" or "make it better".
 
-Return in this format:
+FORMAT:
 {{
   "issues": [
     {{
-      "type": "Hook",
-      "location": "Opening",
       "snippet": "exact phrase",
       "issue": "specific hook problem",
       "suggestion": "specific improvement",
-      "severity": "Medium"
+      "severity": "Low | Medium | High"
     }}
   ]
 }}
 
-If the hook is strong enough, return:
+If no issues:
 {{"issues":[]}}
 
-Transcript opening:
+Transcript:
 {opening}
 """
 
-    result = ask_ai(prompt).strip()
-    return safe_json_parse(result, opening)
+    images = [f["base64"] for f in frames[:2]] if frames else []
+
+    try:
+        result = ask_ai_multimodal(prompt, images, audio_base64)
+
+        if not result:
+            return []
+
+        return safe_json_parse(result.strip(), opening)
+
+    except Exception:
+        return []
