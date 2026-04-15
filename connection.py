@@ -2,15 +2,15 @@ import os
 from typing import Any, Dict, List, Optional
 
 import requests
+import streamlit as st
 
-API_KEY = st.secrets["OPENAI_API_KEY"]
+API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
 
-OPENAI_MODEL = "gpt-4.1-mini"
-OPENAI_TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL", "whisper-1").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL") or st.secrets.get("OPENAI_MODEL", "gpt-4.1-mini")
+OPENAI_TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL") or st.secrets.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1")
 
 RESPONSES_URL = "https://api.openai.com/v1/responses"
 TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
-
 
 def _headers() -> Dict[str, str]:
     if not OPENAI_API_KEY:
