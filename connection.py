@@ -12,6 +12,7 @@ OPENAI_TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL") or st.secrets.get
 RESPONSES_URL = "https://api.openai.com/v1/responses"
 TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
 
+
 def _headers() -> Dict[str, str]:
     if not OPENAI_API_KEY:
         raise Exception("Missing OPENAI_API_KEY")
@@ -21,7 +22,6 @@ def _headers() -> Dict[str, str]:
 
 
 def _extract_response_text(result: Dict[str, Any]) -> str:
-    # Some responses expose a convenience field.
     output_text = result.get("output_text")
     if isinstance(output_text, str) and output_text.strip():
         return output_text.strip()
@@ -158,6 +158,13 @@ def transcribe_audio_file(audio_path: str) -> Dict[str, Any]:
         data = {
             "model": OPENAI_TRANSCRIBE_MODEL,
             "response_format": "verbose_json",
+            "language": "en",
+            "prompt": (
+                "The speaker is using Singaporean or Malaysian accented English. "
+                "Transcribe in English only. "
+                "Do not translate into Malay. "
+                "Preserve natural spoken phrasing and names as accurately as possible."
+            ),
         }
 
         response = requests.post(
