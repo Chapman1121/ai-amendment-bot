@@ -165,23 +165,5 @@ if uploaded:
                 for item in audio["timestamp_notes"]:
                     st.write(f"- {item}")
 
-        with st.expander("Transcript"):
-            st.write(transcript or "No transcript generated.")
-            
-            if rows:
-                df = pd.DataFrame(rows)
-                styled_df = df.style.map(color_severity, subset=["Severity"])
-                st.subheader("QC Board")
-                st.dataframe(styled_df, use_container_width=True, height=520)
-                st.download_button(
-                    "Download Report (CSV)",
-                    data=df.to_csv(index=False).encode("utf-8"),
-                    file_name="video_qc_report.csv",
-                    mime="text/csv",
-                )
-            else:
-                st.info("No QC rows returned.")
-
-
 else:
     st.info("Upload a video to start.")
