@@ -12,7 +12,6 @@ st.markdown("### Koocester")
 st.title("AI Amendment Bot — QC Board")
 st.caption("Upload a video → review clarity, summary, visuals, audio, and QC issues.")
 
-
 uploaded = st.file_uploader("Upload video", type=["mp4", "mov", "mkv", "mpeg4"])
 
 
@@ -35,26 +34,21 @@ if uploaded:
     if st.button("Analyze Video"):
         with st.spinner("Transcribing and analyzing video..."):
             result = run_video_qc(video_path)
-
             docx_bytes = build_report_docx_bytes(result)
 
-
-            st.download_button(
-            "Download DOCX Report",
-             data=docx_bytes,
-              file_name="ai_qc_report.docx",
-               mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-
-        
-       
         summary = result.get("summary") or {}
         info = result.get("info") or {}
         visual = result.get("visual") or {}
         audio = result.get("audio") or {}
         rows = result.get("rows") or []
         transcript = result.get("transcript") or ""
-        
+
+        st.download_button(
+            "Download DOCX Report",
+            data=docx_bytes,
+            file_name="ai_qc_report.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
 
         st.success("Analysis complete")
 
@@ -73,6 +67,34 @@ if uploaded:
             st.subheader("Top Suggestions")
             for item in suggestions:
                 st.write(f"- {item}")
+
+        # QC BOARD MOVED OUTSIDE TRANSCRIPT EXPANDER
+        st.subheader("QC Board")
+        if rows:
+            df = pd.DataFrame(rows)
+
+            preferred_order = [
+                "Timestamp",
+                "Type",
+                "Location",
+                "Snippet",
+                "Issue",
+                "Suggestion",
+                "Severity",
+            ]
+            df = df[[c for c in preferred_order if c in df.columns]]
+
+            styled_df = df.style.map(color_severity, subset=["Severity"] if "Severity" in df.columns else [])
+            st.dataframe(styled_df, use_container_width=True, height=520)
+
+            st.download_button(
+                "Download Report (CSV)",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name="video_qc_report.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("No QC rows returned.")
 
         left, right = st.columns(2)
 
@@ -160,6 +182,6 @@ if uploaded:
             else:
                 st.info("No QC rows returned.")
 
-  
+
 else:
     st.info("Upload a video to start.")

@@ -1,5 +1,5 @@
+from connection import ask_ai
 import json
-from connection import ask_ai_multimodal
 
 
 def safe_json_parse(result: str, fallback_snippet: str):
@@ -8,26 +8,57 @@ def safe_json_parse(result: str, fallback_snippet: str):
         end = result.rfind("}") + 1
 
         if start == -1 or end == 0:
-            return []
+            return [{
+                "Type": "Storytelling",
+                "Location": "Transcript",
+                "Snippet": fallback_snippet[:120],
+                "Issue": "Storytelling flow could not be evaluated reliably.",
+                "Suggestion": "Review whether the narrative is easy to follow from beginning to end.",
+                "Severity": "Medium",
+            }]
 
-        result = result[start:end]
-        data = json.loads(result)
+        cleaned = result[start:end]
+        data = json.loads(cleaned)
 
         rows = []
         seen = set()
+        allowed_severities = {"Low", "Medium", "High"}
 
+        # ✅ ALWAYS ADD ASSESSMENT ROW
+        assessment = data.get("assessment", {}) or {}
+        a_snippet = str(assessment.get("snippet", "")).strip() or fallback_snippet[:120]
+        a_issue = str(assessment.get("issue", "")).strip() or "Storytelling flow reviewed."
+        a_suggestion = str(assessment.get("suggestion", "")).strip() or "Keep the story progression clear and easy to follow."
+        a_severity = str(assessment.get("severity", "Low")).strip().title()
+
+        if a_severity not in allowed_severities:
+            a_severity = "Low"
+
+        rows.append({
+            "Type": "Storytelling",
+            "Location": "Transcript",
+            "Snippet": a_snippet[:120],
+            "Issue": a_issue,
+            "Suggestion": a_suggestion,
+            "Severity": a_severity,
+        })
+        seen.add((a_snippet.lower(), a_issue.lower()))
+
+        # ✅ ADD ISSUE ROWS IF ANY
         for item in data.get("issues", []):
-            snippet = item.get("snippet", "").strip()
-            issue = item.get("issue", "").strip()
-            suggestion = item.get("suggestion", "").strip()
+            snippet = str(item.get("snippet", "")).strip()
+            issue = str(item.get("issue", "")).strip()
+            suggestion = str(item.get("suggestion", "")).strip()
+            severity = str(item.get("severity", "Medium")).strip().title()
 
             if not issue:
                 continue
-
+            if severity not in allowed_severities:
+                severity = "Medium"
             if not snippet or snippet in {"...", ".", ".."}:
                 snippet = fallback_snippet[:120]
 
-            key = (snippet, issue)
+            key = (snippet.lower(), issue.lower())
             if key in seen:
                 continue
             seen.add(key)
@@ -37,8 +68,8 @@ def safe_json_parse(result: str, fallback_snippet: str):
                 "Location": "Transcript",
                 "Snippet": snippet[:120],
                 "Issue": issue,
-                "Suggestion": suggestion if suggestion else "Improve narrative flow",
-                "Severity": "Medium",
+                "Suggestion": suggestion if suggestion else "Improve the flow so the viewer can follow the idea more easily.",
+                "Severity": severity,
             })
 
         return rows
@@ -48,8 +79,8 @@ def safe_json_parse(result: str, fallback_snippet: str):
             "Type": "Storytelling",
             "Location": "Transcript",
             "Snippet": fallback_snippet[:120],
-            "Issue": "Could not parse AI output",
-            "Suggestion": result[:300],
+            "Issue": "Could not parse storytelling evaluation output.",
+            "Suggestion": "Review the narrative flow manually.",
             "Severity": "Medium",
         }]
 
@@ -58,74 +89,58 @@ def check_storytelling(transcript: str, frames: list, audio_base64: str):
     text_part = transcript[:900]
 
     prompt = f"""
-You are reviewing a short-form VIDEO for storytelling clarity.
-
-IMPORTANT CONTEXT:
-- This is a natural conversation or interview, not a scripted speech.
-- Small topic shifts are normal.
-- Casual speaking style is expected.
-
-You must evaluate storytelling using:
-1. transcript clarity
-2. whether the visuals support what is being said
-3. whether pacing, edit flow, and audiovisual continuity help or hurt understanding
-
-YOUR TASK:
-Determine if the viewer would feel CONFUSED while watching.
-
-ONLY FLAG storytelling issues IF:
-- the audience would struggle to follow the idea
-- the explanation is unclear or incomplete
-- visuals do not support the point being made
-- pacing or cuts make the flow harder to follow
-- the speaker leaves a thought unfinished in a confusing way
-
-DO NOT FLAG:
-- natural topic changes
-- casual transitions
-- conversational jumps that still make sense
-- minor flow imperfections
-- simple interview-style visuals unless they clearly hurt understanding
-
-THINK LIKE A VIEWER:
-- Would someone watching this feel lost?
-- Or is it still easy enough to follow?
+You are reviewing STORYTELLING clarity in a short-form video.
 
 IMPORTANT:
-- Return ONLY valid JSON
-- Be strict and selective
-- No generic feedback
+- Use ONLY the transcript.
+- Do NOT assume visuals or audio.
+- Always return ONE assessment row.
+- Add issue rows ONLY if there are real clarity problems.
+- Be realistic: this may be conversational content.
 
 FORMAT:
 {{
+  "assessment": {{
+    "snippet": "exact phrase",
+    "issue": "overall evaluation of storytelling clarity and flow",
+    "suggestion": "overall improvement suggestion",
+    "severity": "Low | Medium | High"
+  }},
   "issues": [
     {{
-      "type": "Storytelling",
-      "location": "Transcript",
       "snippet": "exact phrase",
-      "issue": "why this part is confusing to a viewer",
-      "suggestion": "how to improve clarity",
-      "severity": "Medium"
+      "issue": "specific storytelling problem",
+      "suggestion": "specific improvement",
+      "severity": "Low | Medium | High"
     }}
   ]
 }}
-
-If flow is clear:
-{{"issues":[]}}
 
 Transcript:
 {text_part}
 """
 
-    images = [f["base64"] for f in frames[:3]] if frames else []
-
     try:
-        result = ask_ai_multimodal(prompt, images, audio_base64)
+        result = ask_ai(prompt)
 
         if not result:
-            return []
+            return [{
+                "Type": "Storytelling",
+                "Location": "Transcript",
+                "Snippet": text_part[:120],
+                "Issue": "Storytelling evaluation returned no result.",
+                "Suggestion": "Review the flow manually.",
+                "Severity": "Medium",
+            }]
 
         return safe_json_parse(result.strip(), text_part)
 
     except Exception:
-        return []
+        return [{
+            "Type": "Storytelling",
+            "Location": "Transcript",
+            "Snippet": text_part[:120],
+            "Issue": "Storytelling checker failed.",
+            "Suggestion": "Review the narrative flow manually or inspect the AI response.",
+            "Severity": "Medium",
+        }]

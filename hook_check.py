@@ -8,7 +8,14 @@ def safe_json_parse(result: str, fallback_snippet: str):
         end = result.rfind("}") + 1
 
         if start == -1 or end == 0:
-            return []
+            return [{
+                "Type": "Hook",
+                "Location": "Opening",
+                "Snippet": fallback_snippet[:120],
+                "Issue": "Opening hook could not be evaluated reliably.",
+                "Suggestion": "Review the first few seconds manually for attention, clarity, and energy.",
+                "Severity": "Medium",
+            }]
 
         cleaned = result[start:end]
         data = json.loads(cleaned)
@@ -16,6 +23,25 @@ def safe_json_parse(result: str, fallback_snippet: str):
         rows = []
         seen = set()
         allowed_severities = {"Low", "Medium", "High"}
+
+        assessment = data.get("assessment", {}) or {}
+        a_snippet = str(assessment.get("snippet", "")).strip() or fallback_snippet[:120]
+        a_issue = str(assessment.get("issue", "")).strip() or "Opening hook reviewed."
+        a_suggestion = str(assessment.get("suggestion", "")).strip() or "Keep the opening clear, engaging, and easy to follow."
+        a_severity = str(assessment.get("severity", "Low")).strip().title()
+
+        if a_severity not in allowed_severities:
+            a_severity = "Low"
+
+        rows.append({
+            "Type": "Hook",
+            "Location": "Opening",
+            "Snippet": a_snippet[:120],
+            "Issue": a_issue,
+            "Suggestion": a_suggestion,
+            "Severity": a_severity,
+        })
+        seen.add((a_snippet.lower(), a_issue.lower()))
 
         for item in data.get("issues", []):
             snippet = str(item.get("snippet", "")).strip()
@@ -25,10 +51,8 @@ def safe_json_parse(result: str, fallback_snippet: str):
 
             if not issue:
                 continue
-
             if severity not in allowed_severities:
                 severity = "Medium"
-
             if not snippet or snippet in {"...", ".", ".."}:
                 snippet = fallback_snippet[:120]
 
@@ -42,7 +66,7 @@ def safe_json_parse(result: str, fallback_snippet: str):
                 "Location": "Opening",
                 "Snippet": snippet[:120],
                 "Issue": issue,
-                "Suggestion": suggestion if suggestion else "Make the opening more engaging or attention-grabbing.",
+                "Suggestion": suggestion if suggestion else "Strengthen the first few seconds with a clearer or more engaging opening.",
                 "Severity": severity,
             })
 
@@ -53,14 +77,15 @@ def safe_json_parse(result: str, fallback_snippet: str):
             "Type": "Hook",
             "Location": "Opening",
             "Snippet": fallback_snippet[:120],
-            "Issue": "Could not parse AI output",
-            "Suggestion": result[:300] if result else "Review hook manually.",
+            "Issue": "Could not parse hook evaluation output.",
+            "Suggestion": "Review the opening manually.",
             "Severity": "Medium",
         }]
 
 
 def check_hook(transcript: str, frames: list, audio_base64: str):
     opening = transcript[:220]
+    images = [f["base64"] for f in frames[:2]] if frames else []
 
     prompt = f"""
 You are reviewing the HOOK (first few seconds) of a short-form video.
@@ -70,25 +95,23 @@ You must evaluate the hook using:
 2. opening visuals (frames)
 3. audio energy and delivery
 
-Your goal:
-Decide whether the opening is strong enough to capture attention.
-
 IMPORTANT:
-- Return at most 1 issue.
-- Only flag a problem if the hook is clearly weak.
-- Consider BOTH what is said and how it feels audiovisually.
-- If visuals/audio make the opening dull, you may flag it even if the words are okay.
-- If the opening is engaging overall, return no issues.
-- The snippet must be an exact phrase from the transcript.
-- Do NOT use "..." as a snippet.
+- Always return ONE assessment row, even if the hook is fine.
+- If there are additional specific hook problems, return them under "issues".
+- Be practical and balanced.
+- Consider both the words and the audiovisual impact.
+- The assessment should describe how strong the opening feels overall.
+- The snippet should be an exact phrase from the opening transcript when possible.
 - Return ONLY valid JSON.
-- Do NOT give generic feedback.
-- Every issue must be tied to a specific phrase, moment, visual pattern, or audio problem.
-- Suggestions must be concrete and actionable.
-- Avoid vague phrases like "improve engagement" or "make it better".
 
 FORMAT:
 {{
+  "assessment": {{
+    "snippet": "exact opening phrase",
+    "issue": "overall evaluation of the opening hook",
+    "suggestion": "overall improvement suggestion",
+    "severity": "Low | Medium | High"
+  }},
   "issues": [
     {{
       "snippet": "exact phrase",
@@ -99,22 +122,28 @@ FORMAT:
   ]
 }}
 
-If no issues:
-{{"issues":[]}}
-
 Transcript:
 {opening}
 """
 
-    images = [f["base64"] for f in frames[:2]] if frames else []
-
     try:
-        result = ask_ai_multimodal(prompt, images, audio_base64)
-
+        result = ask_ai_multimodal(prompt, images, None)
         if not result:
-            return []
-
+            return [{
+                "Type": "Hook",
+                "Location": "Opening",
+                "Snippet": opening[:120],
+                "Issue": "Hook evaluation returned no result.",
+                "Suggestion": "Review the first few seconds manually.",
+                "Severity": "Medium",
+            }]
         return safe_json_parse(result.strip(), opening)
-
     except Exception:
-        return []
+        return [{
+            "Type": "Hook",
+            "Location": "Opening",
+            "Snippet": opening[:120],
+            "Issue": "Hook checker failed during multimodal analysis.",
+            "Suggestion": "Review the opening manually or inspect the multimodal request.",
+            "Severity": "Medium",
+        }]

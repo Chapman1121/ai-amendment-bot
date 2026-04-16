@@ -42,6 +42,9 @@ def find_timestamp(snippet: str, segment_data: list):
     best_time = "N/A"
 
     for seg in segment_data:
+        if not isinstance(seg, dict):
+            continue
+
         seg_text = str(seg.get("text", "")).lower().strip()
         if not seg_text:
             continue
@@ -106,6 +109,7 @@ def _fallback_empty_result(segment_data: list):
     return {
         "transcript": "",
         "segment_data": segment_data,
+        "review_flags": [],
         "rows": [{
             "Type": "Video QC",
             "Location": "Video",
@@ -128,16 +132,16 @@ def _fallback_empty_result(segment_data: list):
             "suggestions": ["Check audio quality and try again."],
         },
         "visual": {
-            "score": 1,
-            "summary": "Visual analysis could not be completed because the transcript step failed.",
+            "score": 3,
+            "summary": "Could not analyze visuals reliably.",
             "strengths": [],
             "issues": [],
             "suggestions": [],
             "frame_timestamps": [],
         },
         "audio": {
-            "score": 1,
-            "summary": "Audio analysis could not be completed because transcription failed.",
+            "score": 3,
+            "summary": "Could not analyze audio reliably.",
             "strengths": [],
             "issues": [],
             "suggestions": [],
@@ -150,51 +154,55 @@ def run_video_qc(video_path: str):
     audio_path = extract_full_audio(video_path)
 
     try:
-        transcript, segment_data = transcribe_audio_with_openai(audio_path)
+        raw_transcript, raw_segment_data = transcribe_audio_with_openai(audio_path)
+
+        transcript = raw_transcript.strip()
+        segment_data = raw_segment_data or []
+        review_flags = []
+
+        if not transcript:
+            return _fallback_empty_result(segment_data)
 
         frames = extract_frames(video_path, num_frames=4)
 
         with open(audio_path, "rb") as f:
             audio_base64 = base64.b64encode(f.read()).decode("utf-8")
 
-        if not transcript.strip():
-            return _fallback_empty_result(segment_data)
-
         rows = []
-        checkers = [
-            check_hook,
-            check_typos,
-            check_grammar,
-            check_storytelling,
-            check_required_elements,
-        ]
 
-        multimodal_checkers = {
-            "check_hook",
-            "check_storytelling",
-            "check_required_elements",
-        }
-
-        for checker in checkers:
+        # Transcript-based checks
+        for checker in [check_typos, check_grammar]:
             try:
-                if checker.__name__ in multimodal_checkers:
-                    rows.extend(
-                        _run_checker_multimodal(
-                            checker,
-                            transcript,
-                            segment_data,
-                            frames,
-                            audio_base64,
-                        )
-                    )
-                else:
-                    rows.extend(_run_checker(checker, transcript, segment_data))
+                rows.extend(_run_checker(checker, transcript, segment_data))
             except Exception as exc:
                 rows.append({
                     "Type": checker.__name__.replace("check_", "").replace("_", " ").title(),
                     "Location": "System",
                     "Snippet": transcript[:120],
-                    "Issue": f"{checker.__name__} failed",
+                    "Issue": "Checker failed",
+                    "Suggestion": str(exc)[:250],
+                    "Severity": "Medium",
+                    "Timestamp": "N/A",
+                })
+
+        # Multimodal QC Board rows: always assessment row + optional issue rows
+        for checker in [check_hook, check_storytelling, check_required_elements]:
+            try:
+                rows.extend(
+                    _run_checker_multimodal(
+                        checker,
+                        transcript,
+                        segment_data,
+                        frames,
+                        audio_base64,
+                    )
+                )
+            except Exception as exc:
+                rows.append({
+                    "Type": checker.__name__.replace("check_", "").replace("_", " ").title(),
+                    "Location": "System",
+                    "Snippet": transcript[:120],
+                    "Issue": "Checker failed",
                     "Suggestion": str(exc)[:250],
                     "Severity": "Medium",
                     "Timestamp": "N/A",
@@ -207,8 +215,8 @@ def run_video_qc(video_path: str):
                 "Type": "QC",
                 "Location": "Transcript",
                 "Snippet": transcript[:120],
-                "Issue": "No major transcript-based issues detected",
-                "Suggestion": "Current transcript-based review looks acceptable.",
+                "Issue": "No major issues detected",
+                "Suggestion": "Current review looks acceptable.",
                 "Severity": "Low",
                 "Timestamp": "N/A",
             }]
@@ -284,12 +292,14 @@ def run_video_qc(video_path: str):
         return {
             "transcript": transcript,
             "segment_data": segment_data,
+            "review_flags": review_flags,
             "rows": rows,
             "info": info,
             "summary": summary,
             "visual": visual,
             "audio": audio,
         }
+
     finally:
         try:
             os.remove(audio_path)
