@@ -7,7 +7,6 @@ import streamlit as st
 
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
-
 OPENAI_MODEL = "gpt-4.1-mini"
 OPENAI_TRANSCRIBE_MODEL ="whisper-1"
 
