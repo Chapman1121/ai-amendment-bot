@@ -1,4 +1,4 @@
-from connection import ask_ai
+from connection import ask_ai, ask_ai_multimodal
 import json
 
 
@@ -88,14 +88,42 @@ def safe_json_parse(result: str, fallback_snippet: str):
 def check_storytelling(transcript: str, frames: list, audio_base64: str):
     text_part = transcript[:900]
 
+    # Cap to 8 frames evenly spread across the timeline — enough for
+    # storytelling context without hitting API token limits.
+    if frames:
+        step = max(1, len(frames) // 8)
+        sampled = frames[::step][:8]
+    else:
+        sampled = []
+    images = [f["base64"] for f in sampled if f.get("base64")]
+
+    frames_index = "\n".join(
+        f"- Frame {i+1}: t={f.get('timestamp', 'N/A')}"
+        for i, f in enumerate(frames or [])
+    ) or "- (no frames provided)"
+
     prompt = f"""
-You are reviewing STORYTELLING clarity in a short-form video.
+You are reviewing STORYTELLING clarity and flow in a short-form video.
+
+You may use BOTH the transcript and the sampled frames. Frames cover the
+full timeline (opening → end) so you can judge whether the spoken story
+matches what is shown on screen.
+
+GROUNDING RULES (READ FIRST):
+- Base your judgement ONLY on what is in the transcript and visible in the
+  frames provided. Do NOT invent extra context.
+- If the transcript and visuals MISMATCH (e.g. caption says one word, the
+  visual shows something different), call out the mismatch clearly with the
+  timestamp from the frame index — do not guess which one is "right".
+- Do NOT critique anything that is not actually in the provided material.
+
+Frame index (timestamps):
+{frames_index}
 
 IMPORTANT:
-- Use ONLY the transcript.
-- Do NOT assume visuals or audio.
-- Always return ONE assessment row.
-- Add issue rows ONLY if there are real clarity problems.
+- Always return ONE assessment row, even if storytelling is fine.
+- Add issue rows ONLY if there are real clarity, pacing, or visual-vs-spoken
+  mismatch problems.
 - Be realistic: this may be conversational content.
 
 FORMAT:
@@ -121,7 +149,11 @@ Transcript:
 """
 
     try:
-        result = ask_ai(prompt)
+        # Multimodal: pass frames so the AI can detect visual-vs-spoken mismatches.
+        if images:
+            result = ask_ai_multimodal(prompt, images)
+        else:
+            result = ask_ai(prompt)
 
         if not result:
             return [{
@@ -135,12 +167,12 @@ Transcript:
 
         return safe_json_parse(result.strip(), text_part)
 
-    except Exception:
+    except Exception as e:
         return [{
             "Type": "Storytelling",
             "Location": "Transcript",
             "Snippet": text_part[:120],
-            "Issue": "Storytelling checker failed.",
-            "Suggestion": "Review the narrative flow manually or inspect the AI response.",
+            "Issue": f"Storytelling checker failed: {type(e).__name__}: {str(e)[:200]}",
+            "Suggestion": "Review the narrative flow manually.",
             "Severity": "Medium",
         }]

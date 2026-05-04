@@ -43,7 +43,7 @@ def safe_json_parse(result: str, fallback_snippet: str):
         })
         seen.add((a_snippet.lower(), a_issue.lower()))
 
-        for item in data.get("issues", []):
+        for item in data.get("issues", [])[:1]:  # hard cap — max 1 extra issue
             snippet = str(item.get("snippet", "")).strip()
             issue = str(item.get("issue", "")).strip()
             suggestion = str(item.get("suggestion", "")).strip()
@@ -95,12 +95,19 @@ You must evaluate the hook using:
 2. opening visuals (frames)
 3. audio energy and delivery
 
+GROUNDING RULES (READ FIRST):
+- Base every observation ONLY on what is actually said in the transcript
+  snippet and visible in the opening frames provided.
+- Do NOT invent context, characters, products, or topics not present.
+- Do NOT critique what comes AFTER the opening — focus only on the hook.
+- If an audiovisual mismatch exists (e.g. caption says one thing, visuals
+  show another), call it out explicitly rather than guessing what was meant.
+
 IMPORTANT:
-- Always return ONE assessment row, even if the hook is fine.
-- If there are additional specific hook problems, return them under "issues".
-- Be practical and balanced.
-- Consider both the words and the audiovisual impact.
-- The assessment should describe how strong the opening feels overall.
+- Always return ONE assessment row — a balanced overall evaluation of the hook.
+- Only add ONE extra item under "issues" if there is a single most important specific problem worth calling out separately. If not, leave "issues" as an empty list.
+- Maximum 2 rows total (1 assessment + at most 1 issue). Do NOT return more than 1 issue.
+- Be practical and balanced — do not over-flag.
 - The snippet should be an exact phrase from the opening transcript when possible.
 - Return ONLY valid JSON.
 
@@ -115,7 +122,7 @@ FORMAT:
   "issues": [
     {{
       "snippet": "exact phrase",
-      "issue": "specific hook problem",
+      "issue": "single most important specific hook problem (only if genuinely needed)",
       "suggestion": "specific improvement",
       "severity": "Low | Medium | High"
     }}
@@ -127,7 +134,7 @@ Transcript:
 """
 
     try:
-        result = ask_ai_multimodal(prompt, images, None)
+        result = ask_ai_multimodal(prompt, images)
         if not result:
             return [{
                 "Type": "Hook",

@@ -124,6 +124,13 @@ def check_audio(audio_path: str, transcript: str):
     prompt = f"""
 You are reviewing the AUDIO of a short-form edited video.
 
+GROUNDING RULES (READ FIRST):
+- Base every observation ONLY on what you can actually hear in the audio
+  provided and the transcript text supplied.
+- Do NOT invent moments, words, or sound effects that are not present.
+- If the audio is unclear in a section, say "audio unclear in this section"
+  rather than guessing what was said or what happened.
+
 IMPORTANT CONTEXT:
 - This is social-media style edited content
 - Sound effects like dings, whooshes, pops, transitions, and emphasis sounds may be intentional
@@ -180,9 +187,20 @@ Transcript:
                 "suggestions": parsed.get("suggestions", []),
                 "timestamp_notes": parsed.get("timestamp_notes", [])
             }
-    except:
-        pass
+    except Exception as e:
+        # Surface the error in the fallback so it's visible in the report
+        fallback = fallback_audio_review(audio_path)
+        fallback["summary"] = (
+            f"AI audio review failed ({type(e).__name__}: {str(e)[:200]}). "
+            f"Falling back to technical signal check. {fallback['summary']}"
+        )
+        return fallback
 
-    # fallback if AI audio review fails
-    return fallback_audio_review(audio_path)
+    # fallback if AI returned unparseable output
+    fallback = fallback_audio_review(audio_path)
+    fallback["summary"] = (
+        "AI audio review returned unparseable output. "
+        f"Falling back to technical signal check. {fallback['summary']}"
+    )
+    return fallback
    

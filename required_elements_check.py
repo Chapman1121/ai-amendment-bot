@@ -89,16 +89,49 @@ def check_required_elements(transcript: str, frames: list, audio_base64: str):
     text_part = transcript[:700]
     images = [f["base64"] for f in frames] if frames else []
 
+    frames_index = "\n".join(
+        f"- Frame {i+1}: t={f.get('timestamp', 'N/A')}"
+        for i, f in enumerate(frames or [])
+    ) or "- (no frames provided)"
+
     prompt = f"""
 You are reviewing REQUIRED ELEMENTS in a short-form edited video.
 
 Use:
 1. transcript context
-2. visual frames
+2. visual frames sampled across the ENTIRE video (scene-change aware + interval)
 3. audio context
 
+GROUNDING RULES (READ FIRST):
+- Base every observation ONLY on what is actually present in the frames,
+  audio, and transcript provided.
+- Do NOT invent CTAs, branding, end-cards, or text overlays that are not
+  visibly there.
+- Do NOT assume something exists between frames you cannot see.
+- If unsure whether a CTA is present, say "not clearly visible" — do not guess.
+
+FRAME COVERAGE:
+- Frames cover the full timeline. Mid-video CTA inserts and end-card CTAs
+  should be visible if they exist.
+- When you reference a CTA / branding, cite the timestamp from the index
+  (e.g. "CTA visible at 00:45"). Use Location = "Opening", "Middle", "Ending",
+  or a specific timestamp.
+
+Frame index (in order shown):
+{frames_index}
+
+CTA / BRANDING — DETECTION RULES:
+- The persistent channel watermark (logo in a corner) is NOT by itself a CTA.
+- A CTA is text or graphic explicitly directing the viewer to act, such as:
+   "Follow for more", "Swipe up", "Click the link", "@handle", "Subscribe",
+   product callouts, follow / arrow / pointer animations, or end-card screens.
+- Inspect the LATER frames carefully for end-cards / closing CTAs.
+- Inspect the MIDDLE frames for short pinned overlays — they may only appear
+  in one or two sampled frames but still count.
+- If you see only the watermark and no actionable CTA, say so explicitly.
+
 Evaluate whether the video clearly includes:
-- a noticeable CTA
+- a noticeable opening CTA or hook-line
 - a mid-video CTA if appropriate
 - an ending CTA or closing action
 - branding, identity, or watermark if relevant
@@ -134,7 +167,7 @@ Transcript:
 """
 
     try:
-        result = ask_ai_multimodal(prompt, images, None)
+        result = ask_ai_multimodal(prompt, images)
         if not result:
             return [{
                 "Type": "Required Elements",

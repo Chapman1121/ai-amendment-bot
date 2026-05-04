@@ -7,6 +7,7 @@ def build_report_docx_bytes(result: dict) -> bytes:
 
     summary = result.get("summary") or {}
     info = result.get("info") or {}
+    story_clarity = result.get("story_clarity") or {}
     visual = result.get("visual") or {}
     audio = result.get("audio") or {}
     rows = result.get("rows") or []
@@ -17,7 +18,7 @@ def build_report_docx_bytes(result: dict) -> bytes:
 
     # Scores
     doc.add_heading("Scores", level=1)
-    doc.add_paragraph(f"Story Clarity: {summary.get('story_score', 3)}/5")
+    doc.add_paragraph(f"Story Clarity: {story_clarity.get('score', 3)}/5")
     doc.add_paragraph(f"Information Clarity: {info.get('score', 3)}/5")
     doc.add_paragraph(f"Visuals: {visual.get('score', 3)}/5")
     doc.add_paragraph(f"Audio: {audio.get('score', 3)}/5")
@@ -46,6 +47,20 @@ def build_report_docx_bytes(result: dict) -> bytes:
     if info.get("improvements"):
         doc.add_paragraph("Improvements:", style="List Bullet")
         for s in info["improvements"]:
+            doc.add_paragraph(s, style="List Bullet 2")
+
+    # Story Clarity
+    doc.add_heading("Story Clarity", level=1)
+    doc.add_paragraph(story_clarity.get("summary", ""))
+
+    if story_clarity.get("strengths"):
+        doc.add_paragraph("Strengths:", style="List Bullet")
+        for s in story_clarity["strengths"]:
+            doc.add_paragraph(s, style="List Bullet 2")
+
+    if story_clarity.get("improvements"):
+        doc.add_paragraph("Improvements:", style="List Bullet")
+        for s in story_clarity["improvements"]:
             doc.add_paragraph(s, style="List Bullet 2")
 
     # Visual Review
@@ -90,21 +105,25 @@ def build_report_docx_bytes(result: dict) -> bytes:
     if rows:
         doc.add_heading("QC Board", level=1)
 
-        table = doc.add_table(rows=1, cols=5)
+        table = doc.add_table(rows=1, cols=7)
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = "Type"
-        hdr_cells[1].text = "Location"
-        hdr_cells[2].text = "Snippet"
-        hdr_cells[3].text = "Issue"
-        hdr_cells[4].text = "Suggestion"
+        hdr_cells[1].text = "Severity"
+        hdr_cells[2].text = "Timestamp"
+        hdr_cells[3].text = "Location"
+        hdr_cells[4].text = "Snippet"
+        hdr_cells[5].text = "Issue"
+        hdr_cells[6].text = "Suggestion"
 
         for row in rows:
             cells = table.add_row().cells
             cells[0].text = str(row.get("Type", ""))
-            cells[1].text = str(row.get("Location", ""))
-            cells[2].text = str(row.get("Snippet", ""))
-            cells[3].text = str(row.get("Issue", ""))
-            cells[4].text = str(row.get("Suggestion", ""))
+            cells[1].text = str(row.get("Severity", ""))
+            cells[2].text = str(row.get("Timestamp", "N/A"))
+            cells[3].text = str(row.get("Location", ""))
+            cells[4].text = str(row.get("Snippet", ""))
+            cells[5].text = str(row.get("Issue", ""))
+            cells[6].text = str(row.get("Suggestion", ""))
 
     # Transcript
     doc.add_heading("Transcript", level=1)

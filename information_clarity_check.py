@@ -37,6 +37,12 @@ def check_information_clarity(transcript: str):
     prompt = f"""
 You are evaluating how clearly information is communicated in a video.
 
+GROUNDING RULES (READ FIRST):
+- Base your evaluation ONLY on what is actually said in the transcript below.
+- Do NOT invent facts, claims, or topics not present in the transcript.
+- Do NOT speculate about what the speaker "probably meant" beyond a literal reading.
+- Examples or strengths/improvements you cite must reference content from the transcript.
+
 IMPORTANT:
 - Return ONLY valid JSON
 - Do NOT include markdown

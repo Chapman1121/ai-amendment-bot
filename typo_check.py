@@ -68,8 +68,18 @@ def safe_json_parse(result: str, fallback_snippet: str):
         }]
 
 
-def check_typos(transcript: str):
+def check_typos(transcript: str, glossary: list[str] | None = None):
     text_part = transcript[:500]
+
+    # Build glossary note if we have one
+    glossary_note = ""
+    if glossary:
+        glossary_note = f"""
+KNOWN NAMES AND BRANDS — DO NOT FLAG THESE AS TYPOS:
+{", ".join(glossary)}
+
+These are real brand names, product names, or proper nouns that appear intentionally in this video.
+"""
 
     prompt = f"""
 You are reviewing a transcript for spelling mistakes and typos only.
@@ -82,7 +92,7 @@ Your task:
 - do NOT flag names, brands, or place names unless they are clearly misspelled in context
 - be careful with accented English and transcript-style speech
 - only report obvious typo-like errors
-
+{glossary_note}
 IMPORTANT:
 - Return ONLY valid JSON
 - Do NOT include text before or after JSON

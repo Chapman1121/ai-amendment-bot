@@ -72,8 +72,19 @@ def safe_json_parse(result: str, fallback_snippet: str):
         }]
 
 
-def check_grammar(transcript: str):
+def check_grammar(transcript: str, glossary: list[str] | None = None):
     text_part = transcript[:900]
+
+    # Build glossary note if we have one
+    glossary_note = ""
+    if glossary:
+        glossary_note = f"""
+KNOWN NAMES AND BRANDS — DO NOT FLAG THESE AS GRAMMAR ISSUES:
+{", ".join(glossary)}
+
+These are real brand names, product names, or proper nouns used intentionally in this video.
+Treat them as correct regardless of how unusual they look.
+"""
 
     prompt = f"""
 You are reviewing a RAW interview transcript from a short-form video.
@@ -82,7 +93,7 @@ IMPORTANT CONTEXT:
 - This is spoken English, not written English.
 - The speaker may be from Singapore or Malaysia.
 - Natural conversational grammar is acceptable if the meaning is clear.
-
+{glossary_note}
 YOUR TASK:
 - ONLY flag grammar issues that make the sentence:
   1. hard to understand, OR
@@ -94,6 +105,7 @@ DO NOT FLAG:
 - common conversational grammar used in SG/MY speech
 - stylistic or informal speech
 - sentences that are understandable even if not perfect
+- any word from the known names and brands list above
 
 ONLY FLAG IF:
 - the listener might misunderstand the sentence
@@ -136,8 +148,6 @@ If no real issues:
 Transcript:
 {text_part}
 """
-
-
 
     result = ask_ai(prompt).strip()
     return safe_json_parse(result, text_part)

@@ -4,3 +4,4 @@ pandas
 faster-whisper
 pyspellchecker
 python-docx
+gdown

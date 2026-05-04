@@ -34,6 +34,12 @@ def generate_review_summary(transcript: str):
     prompt = f"""
 You are a video reviewer.
 
+GROUNDING RULES (READ FIRST):
+- Base your review ONLY on the transcript provided below.
+- Do NOT invent topics, products, or events not present in the transcript.
+- Do NOT speculate about visuals you have not seen.
+- Suggestions must be actionable based on what is actually in the transcript.
+
 IMPORTANT:
 - ALWAYS return valid JSON
 - NEVER return empty output
@@ -41,20 +47,18 @@ IMPORTANT:
 
 Evaluate:
 
-1. Story clarity (1–5)
-2. Overall review
-3. Retention (Low / Medium / High)
-4. Suggestions
+1. Overall review — a balanced 2–3 sentence summary of the video as a whole
+2. Retention (Low / Medium / High)
+3. Top suggestions for improvement
 
-SCORING:
-- Most interview-style videos = 3
-- Only give 4 if structure is strong
-- Only give 5 if very polished
+RETENTION RULES:
+- Default to "Medium" for any video that is watchable and has a clear topic
+- Only use "Low" if the video is genuinely hard to follow or has major structural problems
+- Use "High" only if the hook and pacing are actively strong
 
 Return EXACT JSON:
 
 {{
-  "story_score": 3,
   "overall_review": "Balanced explanation here.",
   "retention": "Medium",
   "suggestions": [
@@ -74,14 +78,12 @@ Transcript:
 
     if parsed:
         return {
-            "story_score": parsed.get("story_score", 3),
             "overall_review": parsed.get("overall_review", "Could not generate an overall review reliably."),
             "retention": parsed.get("retention", "Medium"),
             "suggestions": parsed.get("suggestions", [])
         }
 
     return {
-        "story_score": 3,
         "overall_review": "Could not generate an overall review reliably.",
         "retention": "Medium",
         "suggestions": []
