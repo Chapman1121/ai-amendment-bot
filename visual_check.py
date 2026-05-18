@@ -64,6 +64,7 @@ def _legacy_extract_frames(video_path: str, num_frames: int = 4):
             "-ss", str(ts),
             "-i", video_path,
             "-frames:v", "1",
+            "-vf", "scale='min(1280,iw)':-2",
             "-q:v", "4",
             out_path,
         ]
@@ -116,6 +117,7 @@ def extract_frames(
         f"select='gt(scene\\,{scene_threshold})"
         f"+isnan(prev_selected_t)"
         f"+gte(t-prev_selected_t\\,{target_interval})',"
+        f"scale='min(1280,iw)':-2,"
         f"showinfo"
     )
 
@@ -245,6 +247,157 @@ def extract_subtitle_frames(video_path: str, interval_sec: float = 2.0) -> list:
     return frames
 
 
+def extract_end_frames(video_path: str, duration_sec: float = 10.0) -> list:
+    """
+    Extract targeted frames from the final part of the video for end-card CTA QC.
+
+    The end card can be very short, so this samples exact positions near the end:
+    last 5s, last 3s, last 2s, last 1s, plus a true final-frame attempt.
+    It also keeps a debug directory with the JPEGs and manifest so the sampled
+    frames can be inspected after a run.
+    """
+    total = get_video_duration(video_path)
+    debug_dir = tempfile.mkdtemp(prefix="end_cta_debug_")
+
+    target_specs = [
+        ("last_5s", max(0.0, total - 5.0)),
+        ("last_3s", max(0.0, total - 3.0)),
+        ("last_2s", max(0.0, total - 2.0)),
+        ("last_1s", max(0.0, total - 1.0)),
+        ("true_final", max(0.0, total - 0.08)),
+    ]
+
+    seen = set()
+    frames = []
+
+    for idx, (label, ts) in enumerate(target_specs, start=1):
+        rounded_key = round(ts, 2)
+        if rounded_key in seen:
+            continue
+        seen.add(rounded_key)
+
+        path = os.path.join(debug_dir, f"{idx:02d}_{label}_{seconds_to_mmss(ts).replace(':', '-')}.jpg")
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-ss", f"{ts:.3f}",
+            "-i", video_path,
+            "-frames:v", "1",
+            "-vf", "scale='min(1280,iw)':-2",
+            "-q:v", "4",
+            path,
+        ]
+
+        try:
+            subprocess.run(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=60,
+            )
+        except Exception:
+            continue
+
+        if not os.path.exists(path):
+            continue
+
+        frames.append({
+            "timestamp": seconds_to_mmss(ts),
+            "seconds": round(ts, 3),
+            "source": label,
+            "video_duration": round(total, 3),
+            "debug_dir": debug_dir,
+            "debug_path": path,
+            "base64": file_to_base64(path),
+        })
+
+    manifest_path = os.path.join(debug_dir, "manifest.json")
+    try:
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "video_path": video_path,
+                    "video_duration_seconds": total,
+                    "sampled_frames": [
+                        {
+                            "timestamp": frame.get("timestamp"),
+                            "seconds": frame.get("seconds"),
+                            "source": frame.get("source"),
+                            "debug_path": frame.get("debug_path"),
+                        }
+                        for frame in frames
+                    ],
+                },
+                f,
+                indent=2,
+            )
+    except Exception:
+        pass
+
+    return frames
+
+
+def extract_dense_cta_frames(video_path: str, max_frames: int = 50) -> list:
+    """
+    Extract 1 frame per second across the ENTIRE video for mid-CTA detection.
+    Catches half-second CTA overlays that scene-change and interval sampling miss.
+    Capped at `max_frames` frames (evenly sampled if the video is longer).
+    Uses 960px width — smaller than main frames but still sharp enough for CTA text.
+    """
+    total = get_video_duration(video_path)
+    temp_dir = tempfile.mkdtemp(prefix="cta_dense_")
+    out_pattern = os.path.join(temp_dir, "frame_%04d.jpg")
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", video_path,
+        "-vf", "fps=1,scale='min(960,iw)':-2",
+        "-q:v", "5",
+        out_pattern,
+    ]
+
+    try:
+        subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=300,
+        )
+    except Exception:
+        return []
+
+    files = sorted(
+        f for f in os.listdir(temp_dir)
+        if f.startswith("frame_") and f.endswith(".jpg")
+    )
+
+    # Evenly downsample if more frames than the cap
+    if len(files) > max_frames:
+        n = max_frames
+        idxs = [int(round(i * (len(files) - 1) / max(n - 1, 1))) for i in range(n)]
+        seen_i, ordered = set(), []
+        for i in idxs:
+            if i not in seen_i:
+                ordered.append(i)
+                seen_i.add(i)
+        files = [files[i] for i in ordered]
+
+    frames = []
+    for i, fname in enumerate(files):
+        path = os.path.join(temp_dir, fname)
+        if not os.path.exists(path):
+            continue
+        # Approximate timestamp from filename index (1fps = 1s per frame)
+        raw_idx = int(fname.replace("frame_", "").replace(".jpg", "")) - 1
+        ts = float(raw_idx)
+        frames.append({
+            "timestamp": seconds_to_mmss(ts),
+            "base64": file_to_base64(path),
+        })
+
+    return frames
+
 def check_visuals(video_path: str, transcript: str, frames: list | None = None):
     # Reuse pre-extracted frames if provided to avoid running ffmpeg twice.
     if not frames:
@@ -266,79 +419,55 @@ def check_visuals(video_path: str, transcript: str, frames: list | None = None):
     )
 
     prompt = f"""
-You are reviewing the VISUAL quality of a short-form edited video.
+You're a senior Koocester editor doing a visual QC pass on this video. The footage is already shot — your suggestions must be fixes the editor can apply in post.
 
-OUTPUT RULES:
-- ALWAYS return valid JSON
-- NEVER return empty output
-- NEVER include text outside JSON
-- Be realistic, balanced, and practical
+What you're checking:
+- Is the subject visible and easy to look at? If framing is off, can the editor crop or zoom to fix it?
+- Is the exposure readable? If the face is in shadow or the background is blown out, can colour grading or brightness adjustment fix it?
+- Are on-screen graphics, title cards, and text overlays readable and correctly placed?
+- Is there a CTA at the end? Watermark alone does NOT count.
+- Is the watermark visible throughout?
 
-GROUNDING RULES (READ THIS FIRST):
-- Base every observation ONLY on what is actually visible in the frames provided.
-- Do NOT speculate about what might happen between frames you cannot see.
-- Do NOT invent products, characters, locations, or events that are not visibly present.
-- If you are unsure whether something is on screen, do NOT mention it.
-- Reference frame timestamps when you describe visual evidence.
+EDITOR SCOPE — suggestions must be post-production fixes only:
+- Crop or zoom to fix framing issues
+- Colour grade, brightness/contrast adjustment to fix exposure or shadow
+- Flag a graphic/overlay that needs repositioning or resizing
+- Flag missing or broken CTA/watermark so the editor can add or fix it
 
-FRAME COVERAGE:
-- The frames below are sampled across the ENTIRE video (scene-change aware
-  + interval sampling), so opening / middle / end CTAs, b-roll, end-cards
-  and graphics overlays are all in scope.
-- When you flag something, cite the timestamp (e.g. "CTA visible at 01:23").
+NEVER suggest:
+- Refilm the shot or change camera angle
+- Fix the lighting at the shoot
+- The host should move or reposition themselves
+- Anything that requires going back to the shoot
 
-Frame index (in order shown):
+KOOCESTER STYLE: single-location talking-head is standard. Don't flag it for staying in one spot — that's intentional. Only flag things that actually affect viewer experience AND that the editor can fix.
+
+CTA CHECK — do this carefully:
+- Scan every frame, especially the last few
+- Look for: text overlays, follow cards, social handles, branded end-cards
+- Watermark-only at the end = missing CTA, flag it as High
+- If a real CTA is visible, note the timestamp
+
+Only call out what you can actually see in the frames. Reference timestamps when you flag something.
+
+Frame index (in order):
 {frames_index}
 
-CHANNEL STYLE — VERY IMPORTANT, DO NOT VIOLATE:
-- This is a short-form channel where SINGLE-LOCATION talking-head shots are
-  the intentional and expected style.
-- ❌ DO NOT flag "plain background", "static location", "same setting",
-  "repetitive scenery", or "lack of visual variety" as issues. These are
-  stylistic choices, NOT problems.
-- ❌ DO NOT lower the score because the location does not change.
-- ✅ DO judge framing quality, lighting, subject clarity, and on-screen graphics.
-- ✅ A well-framed single-location video can score 4 or 5.
-
-CTA / GRAPHICS HUNT (do this carefully):
-- Look beyond the persistent channel watermark. The watermark alone is NOT a CTA.
-- Specifically scan every frame for:
-   * small text overlays (e.g. "Follow for more", "Swipe up", "@handle")
-   * mid-video CTA cards or pinned graphics
-   * end-cards or closing graphics in the final frames
-   * follow / subscribe buttons or arrows
-   * product or brand callouts
-- A small CTA in one or two frames still counts — flag its timestamp.
-- Distinguish "watermark only" from "real CTA present"; the difference matters.
-
-Evaluate:
-- framing and subject clarity
-- lighting quality
-- whether the speaker is well-positioned and easy to watch
-- whether on-screen text, graphics, or CTAs are visible and clear
-- whether the opening frame is engaging enough to stop a viewer from scrolling
-- whether any mid-video or end-card CTA / branding graphic is present and readable
-
-SCORING:
-5 = very strong — excellent framing, lighting, and clear on-screen graphics
-4 = good — clean framing and lighting, CTA or branding visible
-3 = acceptable — serviceable visuals, nothing distracting
-2 = weak — poor framing, bad lighting, or CTA is missing/unclear
-1 = very poor — visuals actively hurt the viewing experience
-
-IMPORTANT:
-- Do NOT drop the score just because the background is the same across frames
-- A well-framed single-location video can still score 4
-- Only give 5 if framing, lighting, and graphics are all strong
+Scoring:
+5 = everything clean — no post-production visual work needed
+4 = solid, one small thing to tighten in the edit
+3 = watchable but the editor needs to fix something
+2 = real problem that will affect the viewer experience — needs editorial intervention
+1 = don't upload this
 
 Return EXACT JSON:
 
 {{
   "score": 3,
-  "summary": "Short balanced explanation.",
-  "strengths": ["point", "point"],
-  "issues": ["point", "point"],
-  "suggestions": ["point", "point", "point"]
+  "summary": "One direct line on the overall visual quality.",
+  "strengths": ["specific thing working — with timestamp if relevant"],
+  "issues": ["specific problem — with timestamp"],
+  "suggestions": ["specific post-production fix — crop, grade, reposition overlay, add CTA — not a filming note"]
 }}
 
 Transcript context:

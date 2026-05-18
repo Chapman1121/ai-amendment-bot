@@ -13,7 +13,9 @@ def _seconds_to_mmss(value) -> str:
 
 
 def transcribe_audio_with_openai(audio_path: str, hint_words: str = ""):
-    parsed = transcribe_audio_file(audio_path, hint_words=hint_words or None)
+    parsed = transcribe_audio_file(audio_path, hint_words=hint_words or None) or {}
+    if not isinstance(parsed, dict):
+        parsed = {"text": str(parsed), "segments": []}
 
     transcript = str(parsed.get("text", "")).strip()
     raw_segments = parsed.get("segments", []) or []
@@ -24,13 +26,18 @@ def transcribe_audio_with_openai(audio_path: str, hint_words: str = ""):
         for seg in raw_segments:
             if not isinstance(seg, dict):
                 continue
-            segment_data.append(
-                {
-                    "start": _seconds_to_mmss(seg.get("start")),
-                    "end": _seconds_to_mmss(seg.get("end")),
-                    "text": str(seg.get("text", "")).strip(),
-                }
-            )
+            text = str(seg.get("text", "")).strip()
+            if not text:
+                continue
+            item = {
+                "start": _seconds_to_mmss(seg.get("start")),
+                "end": _seconds_to_mmss(seg.get("end")),
+                "text": text,
+            }
+            speaker = seg.get("speaker")
+            if speaker:
+                item["speaker"] = str(speaker)
+            segment_data.append(item)
 
     elif isinstance(raw_words, list) and raw_words:
         bucket = []

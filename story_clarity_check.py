@@ -34,52 +34,46 @@ def check_story_clarity(transcript: str):
     text_part = transcript[:1500]
 
     prompt = f"""
-You are evaluating the story clarity and narrative structure of a short-form social media video.
+You're a senior Koocester editor checking the story structure of this video. The footage is already shot — your job is to work with what's there.
 
-GROUNDING RULES (READ FIRST):
-- Base your evaluation ONLY on the transcript provided below.
-- Do NOT invent topics, events, or narrative elements not present in the transcript.
-- Examples you cite in strengths or improvements MUST reference actual content from the transcript.
+EDITOR SCOPE — you can only suggest:
+- Cut or trim sections (e.g. "trim the rambling at 01:20 — it breaks the flow")
+- Reorder clips (e.g. "move the price reveal earlier — lead with it")
+- Add text overlays, title cards, or captions to fill context gaps
+- Add b-roll, graphics, or transitions to bridge jumps
+- Tighten pacing by cutting dead air or repeated points
 
-FORMAT CONTEXT:
-- This is casual short-form content (home tours, vlogs, interviews, lifestyle).
-- Natural conversation, informal phrasing, and casual flow are EXPECTED and NORMAL for this format.
-- Do NOT penalise the video for not being scripted or polished.
+NEVER suggest:
+- The host should explain something differently or add more detail
+- Re-filming, re-recording, or changing what was said
+- The host should have covered a topic they didn't cover
+- Anything that requires going back to the shoot
 
-SCORING RULES:
-Score 5:
-- Very clear story arc — strong opening hook, coherent middle, satisfying close.
+Koocester content doesn't need to be scripted — but it should feel like it goes somewhere:
+- Opens with something that sets the scene or grabs you immediately
+- Builds through the middle — reveals something, shows something, takes you somewhere
+- Lands with a clear close — CTA, key takeaway, or satisfying end
 
-Score 4:
-- Mostly clear narrative with a recognisable structure even if informal.
+Check only what's actually in the transcript. Don't invent content that isn't there.
 
-Score 3:
-- Watchable and followable, but the narrative feels loose or incomplete.
-  DEFAULT for any casual interview / vlog / home-tour that is coherent but unscripted.
+Scoring:
+5 = strong arc — hook, build, and landing all working together
+4 = mostly there — structure is clear even if informal
+3 = watchable but loose — meanders a bit (normal for unscripted content that's still followable)
+2 = hard to follow — confusing jumps that need editorial intervention
+1 = no story — needs heavy restructuring in the edit
 
-Score 2:
-- Genuinely hard to follow — confusing jumps, missing context, unclear purpose.
+Max 3 strengths and 3 improvements. Every improvement must be something an editor can do in post — no production notes.
 
-Score 1:
-- Incoherent or unwatchable — no clear story at all.
-
-IMPORTANT:
-- When in doubt between two scores, pick the HIGHER one.
-- Only give 2 or 1 if the video is genuinely difficult to follow.
-- Do NOT list more than 3 strengths and 3 improvements.
-- Keep each point concise (1 sentence).
-
-Return EXACTLY in this JSON format with no markdown, no code fences, no extra text:
+Return EXACTLY this JSON with no markdown:
 {{
   "score": 3,
-  "summary": "Short balanced explanation of the narrative structure.",
+  "summary": "Direct one-liner on the story structure — is it working?",
   "strengths": [
-    "Strength 1",
-    "Strength 2"
+    "specific thing working in this video"
   ],
   "improvements": [
-    "Improvement 1",
-    "Improvement 2"
+    "specific edit-room fix — cut, reorder, overlay, or caption — not a filming note"
   ]
 }}
 

@@ -32,39 +32,28 @@ def generate_review_summary(transcript: str):
     text_part = transcript[:1200]
 
     prompt = f"""
-You are a video reviewer.
+You're the head editor at Koocester giving a straight debrief on this video before it goes to Frame.io. The footage is locked — the editor can only work in post.
 
-GROUNDING RULES (READ FIRST):
-- Base your review ONLY on the transcript provided below.
-- Do NOT invent topics, products, or events not present in the transcript.
-- Do NOT speculate about visuals you have not seen.
-- Suggestions must be actionable based on what is actually in the transcript.
+Give a 2–3 sentence honest summary — what's working, what's not, and whether it's ready. No fluff. Talk like you're briefing a junior editor, not a producer.
 
-IMPORTANT:
-- ALWAYS return valid JSON
-- NEVER return empty output
-- NEVER include text outside JSON
+Then call the retention:
+- High: hook is strong, pacing holds, content is engaging enough that people will stay
+- Medium: watchable, gets the point across
+- Low: loses the viewer early or has a structural problem that hurts watch time
 
-Evaluate:
+Then give 3 specific things the editor needs to act on before uploading. Every suggestion must be something they can do in the edit — cuts, reorders, overlays, captions, title cards, pacing fixes, SFX. No notes about what the host should have said or done differently. Not "explain this better" — the host can't re-record. Instead: "cut the section at [X] — it kills the pacing" or "add a price overlay at [X] — the number is mentioned too fast to register."
 
-1. Overall review — a balanced 2–3 sentence summary of the video as a whole
-2. Retention (Low / Medium / High)
-3. Top suggestions for improvement
-
-RETENTION RULES:
-- Default to "Medium" for any video that is watchable and has a clear topic
-- Only use "Low" if the video is genuinely hard to follow or has major structural problems
-- Use "High" only if the hook and pacing are actively strong
+Base everything only on the transcript. Don't mention visuals you haven't seen.
 
 Return EXACT JSON:
 
 {{
-  "overall_review": "Balanced explanation here.",
+  "overall_review": "2-3 sentence straight-up verdict — what's working and what the editor needs to fix.",
   "retention": "Medium",
   "suggestions": [
-    "Suggestion 1",
-    "Suggestion 2",
-    "Suggestion 3"
+    "Specific edit-room action 1 — cut, reorder, overlay, caption, or pacing fix",
+    "Specific edit-room action 2",
+    "Specific edit-room action 3"
   ]
 }}
 

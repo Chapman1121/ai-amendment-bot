@@ -88,48 +88,55 @@ def check_hook(transcript: str, frames: list, audio_base64: str):
     images = [f["base64"] for f in frames[:2]] if frames else []
 
     prompt = f"""
-You are reviewing the HOOK (first few seconds) of a short-form video.
+You're a senior Koocester editor doing a no-BS hook check on this video. The footage is already shot — you can only work with what's there.
 
-You must evaluate the hook using:
-1. spoken opening (transcript)
-2. opening visuals (frames)
-3. audio energy and delivery
+The hook is the first 3 seconds. If it doesn't stop the scroll, nothing else matters.
 
-GROUNDING RULES (READ FIRST):
-- Base every observation ONLY on what is actually said in the transcript
-  snippet and visible in the opening frames provided.
-- Do NOT invent context, characters, products, or topics not present.
-- Do NOT critique what comes AFTER the opening — focus only on the hook.
-- If an audiovisual mismatch exists (e.g. caption says one thing, visuals
-  show another), call it out explicitly rather than guessing what was meant.
+Check all three:
+1. Does the opening line immediately pull you in? Or does it start slow?
+2. Do the opening frames have energy — movement, strong subject, something that makes you look?
+3. Is the audio clear and punchy right from the top, or does it start quiet/flat?
 
-IMPORTANT:
-- Always return ONE assessment row — a balanced overall evaluation of the hook.
-- Only add ONE extra item under "issues" if there is a single most important specific problem worth calling out separately. If not, leave "issues" as an empty list.
-- Maximum 2 rows total (1 assessment + at most 1 issue). Do NOT return more than 1 issue.
-- Be practical and balanced — do not over-flag.
-- The snippet should be an exact phrase from the opening transcript when possible.
-- Return ONLY valid JSON.
+EDITOR SCOPE — if the hook isn't working, your suggestions must be edit-room fixes only:
+- Trim dead seconds from the start so a stronger moment hits first
+- Reorder: pull a more punchy line from later in the video to open with (using a text overlay or cut)
+- Add a bold text overlay in the first 2 seconds to inject energy the delivery alone doesn't have
+- Cut to a more visually striking frame to open on
+- Add a sound effect or music hit to punch up the opening
 
-FORMAT:
+NEVER suggest:
+- The host should deliver the line differently or with more energy
+- Re-filming the opening
+- The host should have said something different
+- Anything that requires going back to the shoot
+
+GROUNDING RULES:
+- Only judge what's actually in the transcript opening and the frames provided.
+- Don't make up context that isn't there.
+- If the caption says one thing and the visual shows something different, flag it with the frame timestamp — don't guess which is right.
+
+Give ONE straight-up verdict on the hook overall. Only add a second issue if there's one specific problem that really needs to be called out separately.
+
+Return ONLY valid JSON:
+
 {{
   "assessment": {{
-    "snippet": "exact opening phrase",
-    "issue": "overall evaluation of the opening hook",
-    "suggestion": "overall improvement suggestion",
+    "snippet": "exact opening phrase from transcript",
+    "issue": "straight verdict — is this hook working or not, and why",
+    "suggestion": "specific edit-room fix — trim, reorder, overlay, or SFX — not a host note",
     "severity": "Low | Medium | High"
   }},
   "issues": [
     {{
       "snippet": "exact phrase",
-      "issue": "single most important specific hook problem (only if genuinely needed)",
-      "suggestion": "specific improvement",
+      "issue": "one specific problem worth calling out separately",
+      "suggestion": "specific edit-room fix",
       "severity": "Low | Medium | High"
     }}
   ]
 }}
 
-Transcript:
+Transcript opening:
 {opening}
 """
 

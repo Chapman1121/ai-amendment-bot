@@ -39,16 +39,18 @@ st.info(
 # ---------- Sidebar: channel context, filters, reset ----------
 with st.sidebar:
     st.header("Settings")
-    st.caption("Optional context to make the AI review more accurate.")
-    channel_style = st.text_area(
-        "Channel / content style",
-        value=st.session_state.get("channel_style", ""),
-        placeholder="e.g. Singaporean food vlogs, single-location talking-head, casual tone.",
-        height=110,
-        help="This is shown to the AI so it doesn't penalize intentional stylistic choices.",
+    st.caption("Tell the bot what kind of video this is so it applies the right Koocester SOP rules.")
+
+    content_type = st.selectbox(
+        "Content type",
+        options=["Business & Wealth", "Homes", "Autos", "Foodie", "General"],
+        index=["Business & Wealth", "Homes", "Autos", "Foodie", "General"].index(
+            st.session_state.get("content_type", "General")
+        ),
+        help="Sets which Koocester title card, subtitle, and brand rules to check against.",
     )
-    st.caption("tell the ai what kind of content this is so it reviews it fairly — e.g. casual vlog, interview, product review.")
-    st.session_state["channel_style"] = channel_style
+    st.caption("this controls which SOP rules the bot checks — title card format, colours, and brand elements vary by content type.")
+    st.session_state["content_type"] = content_type
 
     severity_filter = st.multiselect(
         "QC severity filter",
@@ -58,22 +60,6 @@ with st.sidebar:
     )
     st.caption("use this to show only the issues that matter most. high = must fix, medium = good to fix, low = minor.")
     st.session_state["severity_filter"] = severity_filter
-
-    st.divider()
-    st.subheader("Frame coverage")
-    st.caption(
-        "How many frames the AI sees. Scene-change detection + interval "
-        "sampling cover the entire video — higher = better at catching "
-        "mid-video CTAs, but more API cost."
-    )
-    max_frames = st.select_slider(
-        "Frames per analysis",
-        options=[8, 12, 16, 20, 24, 30],
-        value=st.session_state.get("max_frames", 16),
-        help="Defaults to 16. Bump to 24 or 30 for longer videos with lots of cuts.",
-    )
-    st.caption("use 30 for best results — the ai will check more of the video and catch more issues.")
-    st.session_state["max_frames"] = max_frames
 
     st.divider()
     if st.button("Reset analysis", use_container_width=True):
@@ -352,7 +338,8 @@ if video_ready:
                 result = run_video_qc(
                     st.session_state["video_path"],
                     progress=progress,
-                    max_frames=int(st.session_state.get("max_frames", 16)),
+                    max_frames=16,
+                    content_type=st.session_state.get("content_type", "General"),
                 )
 
                 total_elapsed = int(time.time() - start_time)
@@ -703,6 +690,8 @@ if result:
         stored_glossary = result.get("glossary") or []
         stored_segment_data = result.get("segment_data") or []
         stored_video_path = st.session_state.get("video_path") or ""
+        stored_end_frames = result.get("end_frames") or []
+        stored_dense_cta_frames = result.get("dense_cta_frames") or []
 
         ra_progress_bar = st.progress(0.0, text="Re-analysing...")
         ra_start = time.time()
@@ -735,6 +724,9 @@ if result:
                     video_path=stored_video_path,
                     glossary=stored_glossary,
                     progress=ra_progress,
+                    content_type=st.session_state.get("content_type", "General"),
+                    dense_cta_frames=stored_dense_cta_frames,
+                    end_frames=stored_end_frames,
                 )
                 ra_status.update(label="Re-analysis complete", state="complete", expanded=False)
 
@@ -750,12 +742,11 @@ if result:
             updated_result["transcript"] = edited_transcript
             st.session_state["qc_result"] = updated_result
             st.rerun()
-
         except Exception as exc:
             ra_progress_bar.progress(1.0, text="❌ Re-analysis failed")
             st.error("Re-analysis failed.")
             st.exception(exc)
 
-elif not uploaded:
-    st.info("Upload a video to start.")
+elif not video_ready:
+    st.info("Upload a video or load one from Google Drive to start.")
 # end of app.py

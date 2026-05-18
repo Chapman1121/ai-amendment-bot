@@ -1,3 +1,4 @@
+import mimetypes
 import os
 
 from typing import Any, Dict, List, Optional
@@ -7,9 +8,16 @@ import streamlit as st
 
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
-OPENAI_MODEL = "gpt-4.1-mini"
-OPENAI_AUDIO_MODEL = "gpt-4o-audio-preview"
+
+# Text-only tasks (grammar, typo, story clarity, summaries) — fast and cheap
+OPENAI_MODEL = "gpt-5.2"
+
+# Vision tasks (SOP checks, CTA detection, visual review) — full model for colour/animation accuracy
+OPENAI_VISION_MODEL = "gpt-5.2"
+
+OPENAI_AUDIO_MODEL = "gpt-audio"
 OPENAI_TRANSCRIBE_MODEL = "whisper-1"
+OPENAI_TRANSCRIBE_RESPONSE_FORMAT = ""
 
 RESPONSES_URL = "https://api.openai.com/v1/responses"
 CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
@@ -82,7 +90,15 @@ def ask_ai(prompt: str) -> str:
     ])
 
 
+def _image_data_url(image_base64_or_url: str) -> str:
+    image = str(image_base64_or_url or "").strip()
+    if image.startswith("data:image/"):
+        return image
+    return f"data:image/jpeg;base64,{image}"
+
+
 def ask_ai_images(prompt: str, images_base64: list) -> str:
+    """Send prompt + images to the configured vision model via Responses API."""
     content: List[Dict[str, Any]] = [
         {
             "type": "input_text",
@@ -94,14 +110,15 @@ def ask_ai_images(prompt: str, images_base64: list) -> str:
         content.append(
             {
                 "type": "input_image",
-                "image_url": f"data:image/jpeg;base64,{img}",
+                "image_url": _image_data_url(img),
             }
         )
 
-    return _post_responses(content)
+    return _post_responses(content, model=OPENAI_VISION_MODEL)
 
 
 def ask_ai_multimodal(prompt: str, images_base64: Optional[list] = None) -> str:
+    """Send prompt + optional images to the configured vision model via Responses API."""
     content: List[Dict[str, Any]] = [
         {
             "type": "input_text",
@@ -113,11 +130,11 @@ def ask_ai_multimodal(prompt: str, images_base64: Optional[list] = None) -> str:
         content.append(
             {
                 "type": "input_image",
-                "image_url": f"data:image/jpeg;base64,{img}",
+                "image_url": _image_data_url(img),
             }
         )
 
-    return _post_responses(content)
+    return _post_responses(content, model=OPENAI_VISION_MODEL)
 
 
 def _post_chat_completions(messages: List[Dict[str, Any]], model: str) -> str:
@@ -143,7 +160,7 @@ def _post_chat_completions(messages: List[Dict[str, Any]], model: str) -> str:
 
 
 def ask_ai_audio(prompt: str, audio_base64: str) -> str:
-    """Send prompt + audio to gpt-4o-audio-preview via Chat Completions."""
+    """Send prompt + MP3 audio to the configured audio model via Chat Completions."""
     return _post_chat_completions(
         messages=[
             {
@@ -164,10 +181,37 @@ def ask_ai_audio(prompt: str, audio_base64: str) -> str:
     )
 
 
+def _audio_mime_type(audio_path: str) -> str:
+    guessed, _ = mimetypes.guess_type(audio_path)
+    return guessed or "application/octet-stream"
+
+
+def _transcription_response_format(model: str) -> str:
+    model = (model or "").strip()
+    requested = (OPENAI_TRANSCRIBE_RESPONSE_FORMAT or "").strip()
+
+    if model == "whisper-1":
+        allowed = {"json", "text", "srt", "verbose_json", "vtt"}
+        return requested if requested in allowed else "verbose_json"
+
+    if model == "gpt-4o-transcribe-diarize":
+        allowed = {"json", "text", "diarized_json"}
+        return requested if requested in allowed else "diarized_json"
+
+    if model in {"gpt-4o-transcribe", "gpt-4o-mini-transcribe"}:
+        allowed = {"json", "text"}
+        return requested if requested in allowed else "json"
+
+    return requested or "json"
+
+
 def transcribe_audio_file(audio_path: str, hint_words: Optional[str] = None) -> Dict[str, Any]:
+    model = OPENAI_TRANSCRIBE_MODEL
+    response_format = _transcription_response_format(model)
+
     with open(audio_path, "rb") as f:
         files = {
-            "file": (os.path.basename(audio_path), f, "audio/mpeg"),
+            "file": (os.path.basename(audio_path), f, _audio_mime_type(audio_path)),
         }
         base_prompt = (
             "The speaker is using Singaporean or Malaysian accented English. "
@@ -180,11 +224,18 @@ def transcribe_audio_file(audio_path: str, hint_words: Optional[str] = None) -> 
             whisper_prompt += f" Key words in this video: {hint_words}."
 
         data = {
-            "model": OPENAI_TRANSCRIBE_MODEL,
-            "response_format": "verbose_json",
+            "model": model,
+            "response_format": response_format,
             "language": "en",
-            "prompt": whisper_prompt,
         }
+
+        # gpt-4o-transcribe-diarize does not support prompt. Other supported
+        # transcription models can use it to improve local names and phrasing.
+        if model != "gpt-4o-transcribe-diarize":
+            data["prompt"] = whisper_prompt
+
+        if model == "gpt-4o-transcribe-diarize":
+            data["chunking_strategy"] = "auto"
 
         response = requests.post(
             TRANSCRIPTIONS_URL,
@@ -196,6 +247,9 @@ def transcribe_audio_file(audio_path: str, hint_words: Optional[str] = None) -> 
 
     if not response.ok:
         raise Exception(f"OpenAI transcription error {response.status_code}: {response.text[:1200]}")
+
+    if response_format == "text":
+        return {"text": response.text.strip(), "segments": []}
 
     result = response.json()
     if not isinstance(result, dict):

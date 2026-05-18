@@ -103,42 +103,53 @@ def check_storytelling(transcript: str, frames: list, audio_base64: str):
     ) or "- (no frames provided)"
 
     prompt = f"""
-You are reviewing STORYTELLING clarity and flow in a short-form video.
+You're a senior Koocester editor checking if this video's story holds together and flows. The footage is already shot — your job is to fix what you can in the edit.
 
-You may use BOTH the transcript and the sampled frames. Frames cover the
-full timeline (opening → end) so you can judge whether the spoken story
-matches what is shown on screen.
+Koocester content doesn't need to be scripted — but it should feel like it's going somewhere. Check:
+- Does it open with something that sets the scene or pulls you in?
+- Does the middle build toward something — a reveal, a point, a moment?
+- Does it land cleanly at the end, or just... stop?
+- Are there any jarring jumps or gaps in flow the editor can smooth over?
+- Do the visuals match what's being said? Check the frame timestamps — if something's off, call it out.
 
-GROUNDING RULES (READ FIRST):
-- Base your judgement ONLY on what is in the transcript and visible in the
-  frames provided. Do NOT invent extra context.
-- If the transcript and visuals MISMATCH (e.g. caption says one word, the
-  visual shows something different), call out the mismatch clearly with the
-  timestamp from the frame index — do not guess which one is "right".
-- Do NOT critique anything that is not actually in the provided material.
+EDITOR SCOPE — every suggestion must be an edit-room fix:
+- Cut or trim sections that break flow or meander
+- Reorder clips to create a cleaner narrative arc
+- Add a title card or text overlay to bridge a context gap (e.g. "cut to a location title card here — the viewer doesn't know where we are")
+- Add a transition or b-roll to smooth a jarring jump between topics
+- Tighten pacing by removing dead air between points
 
-Frame index (timestamps):
+NEVER suggest:
+- The host should explain something more clearly or add more context
+- Re-filming any section
+- The host should have said or shown something different
+- Anything requiring changes to the spoken content
+
+GROUNDING RULES:
+- Only judge what's actually in the transcript and visible in the frames.
+- If captions and visuals don't match at a specific moment, flag it with the timestamp.
+- Don't flag it for being casual or conversational — that's the format.
+- Don't critique things that aren't actually in the material.
+
+Frame timestamps:
 {frames_index}
 
-IMPORTANT:
-- Always return ONE assessment row, even if storytelling is fine.
-- Add issue rows ONLY if there are real clarity, pacing, or visual-vs-spoken
-  mismatch problems.
-- Be realistic: this may be conversational content.
+Always return ONE overall verdict on the story. Add issue rows only if there are real problems — confusing jumps, flow breaks, or visual mismatches that the editor can fix.
 
-FORMAT:
+Return ONLY valid JSON:
+
 {{
   "assessment": {{
-    "snippet": "exact phrase",
-    "issue": "overall evaluation of storytelling clarity and flow",
-    "suggestion": "overall improvement suggestion",
+    "snippet": "exact phrase from transcript",
+    "issue": "straight verdict — is the story working, and why or why not",
+    "suggestion": "specific edit-room fix — cut, reorder, title card, or b-roll — not a host note",
     "severity": "Low | Medium | High"
   }},
   "issues": [
     {{
       "snippet": "exact phrase",
-      "issue": "specific storytelling problem",
-      "suggestion": "specific improvement",
+      "issue": "specific problem — confusing jump, flow break, visual mismatch",
+      "suggestion": "specific edit-room fix",
       "severity": "Low | Medium | High"
     }}
   ]

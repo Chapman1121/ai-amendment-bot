@@ -87,63 +87,37 @@ Treat them as correct regardless of how unusual they look.
 """
 
     prompt = f"""
-You are reviewing a RAW interview transcript from a short-form video.
+You're a Koocester editor checking subtitle grammar.
 
-IMPORTANT CONTEXT:
-- This is spoken English, not written English.
-- The speaker may be from Singapore or Malaysia.
-- Natural conversational grammar is acceptable if the meaning is clear.
+This is spoken SG/MY English — casual grammar is totally fine. The bar is simple: would a viewer reading this subtitle actually misunderstand what's being said?
+
+DON'T flag:
+- Casual phrasing ("lah", "mah", "lor", "can or not")
+- Missing articles ("I go shop" is fine — it's conversational)
+- Informal SG/MY sentence structure that's still clear
+- Anything understandable even if not "textbook" English
 {glossary_note}
-YOUR TASK:
-- ONLY flag grammar issues that make the sentence:
-  1. hard to understand, OR
-  2. clearly incorrect to the point it sounds broken
+ONLY flag if:
+- The sentence is confusing and the viewer won't know what was meant
+- The grammar is so broken it looks like a transcription error
 
-DO NOT FLAG:
-- casual spoken phrasing
-- missing small words (e.g., "I go shop" instead of "I go to the shop")
-- common conversational grammar used in SG/MY speech
-- stylistic or informal speech
-- sentences that are understandable even if not perfect
-- any word from the known names and brands list above
+Max 2–3 flags. If it's clean, return an empty list — don't go looking for problems that aren't there.
 
-ONLY FLAG IF:
-- the listener might misunderstand the sentence
-- the grammar is noticeably broken or confusing
-
-EXAMPLES:
-
-DO NOT FLAG:
-- "Are you sell PS5?" → understandable in conversation
-- "every day I cycling" → acceptable spoken phrasing
-
-FLAG:
-- "He go yesterday tomorrow" → unclear meaning
-- "This thing is not make sense doing" → broken structure
-
-IMPORTANT:
-- Return ONLY valid JSON
-- Do NOT include any explanation outside JSON
-- Max 2–3 issues only (be selective)
-- The snippet must be exact text from transcript
-- Do NOT use "..."
-
-FORMAT:
+Return ONLY valid JSON:
 {{
   "issues": [
     {{
       "type": "Grammar",
       "location": "Transcript",
-      "snippet": "exact phrase",
-      "issue": "clear explanation of why it is confusing or broken",
-      "suggestion": "improved version",
-      "severity": "Low" | "Medium"
+      "snippet": "exact phrase from transcript",
+      "issue": "why this will confuse the viewer",
+      "suggestion": "fixed version",
+      "severity": "Low"
     }}
   ]
 }}
 
-If no real issues:
-{{"issues":[]}}
+If clean: {{"issues":[]}}
 
 Transcript:
 {text_part}

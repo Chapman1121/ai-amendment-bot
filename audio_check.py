@@ -122,52 +122,41 @@ def check_audio(audio_path: str, transcript: str):
     audio_base64 = audio_file_to_base64(audio_path)
 
     prompt = f"""
-You are reviewing the AUDIO of a short-form edited video.
+You're a senior Koocester editor doing an audio QC pass on this video.
 
-GROUNDING RULES (READ FIRST):
-- Base every observation ONLY on what you can actually hear in the audio
-  provided and the transcript text supplied.
-- Do NOT invent moments, words, or sound effects that are not present.
-- If the audio is unclear in a section, say "audio unclear in this section"
-  rather than guessing what was said or what happened.
+Koocester audio standard:
+- Raw footage audio should be at max — no quiet or muffled delivery
+- Fade in and fade out on raw audio should be 0.0 (no fade)
+- SFX should be futuristic and premium — from the CapCut library
+- Voice needs to sit clearly above music and SFX
+- No distracting background noise, hiss, or clipping
 
-IMPORTANT CONTEXT:
-- This is social-media style edited content
-- Sound effects like dings, whooshes, pops, transitions, and emphasis sounds may be intentional
-- Do NOT treat sound effects as problems just because they are present
-- Only flag sound effects if they clearly overpower speech, feel excessive, or reduce the viewing experience
+What you're checking:
+- Is the voice clear and easy to hear throughout? Or does it get buried under music/SFX?
+- Is there any obvious clipping, distortion, or dead silence that shouldn't be there?
+- Do the SFX feel intentional and polished, or messy and random?
+- Any specific moments where the audio clearly drops off, spikes, or cuts weirdly?
 
-Your task:
-Evaluate:
-- voice clarity
-- background noise
-- whether sound effects/music fit the style
-- whether audio supports or hurts the viewing experience
+SFX NOTE: dings, whooshes, and transition sounds are part of the Koocester style. Don't flag them unless they're actually drowning out the speaker or ruining the experience.
 
-IMPORTANT:
-- Be balanced and practical
-- Do NOT overreact to common editing effects
-- Do NOT list many repetitive timestamps for the same issue
-- Only mention 1–3 timestamps for the clearest examples if really needed
-- If the voices are clear overall, say so clearly
-- If SFX are stylistic and acceptable, acknowledge that
+Only flag things that would genuinely affect the viewer. Be specific — if there's a problem, say when and what it is.
 
-SCORING:
-5 = excellent, polished audio
-4 = good audio with minor issues
-3 = acceptable / average
-2 = noticeably distracting
-1 = poor
+Scoring:
+5 = polished audio — voice clear, SFX balanced, nothing to fix
+4 = good, one small thing to address
+3 = acceptable but something needs attention
+2 = noticeable problem that will put viewers off
+1 = bad audio — fix before uploading
 
 Return EXACT JSON:
 
 {{
   "score": 3,
-  "summary": "Short balanced explanation.",
-  "strengths": ["point"],
-  "issues": ["point"],
-  "suggestions": ["point"],
-  "timestamp_notes": ["00:59 - example note"]
+  "summary": "Straight verdict on the audio quality.",
+  "strengths": ["what's working"],
+  "issues": ["what's wrong — be specific"],
+  "suggestions": ["exactly how to fix it"],
+  "timestamp_notes": ["MM:SS - specific moment to check"]
 }}
 
 Transcript:

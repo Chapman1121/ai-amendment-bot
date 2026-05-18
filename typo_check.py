@@ -82,39 +82,32 @@ These are real brand names, product names, or proper nouns that appear intention
 """
 
     prompt = f"""
-You are reviewing a transcript for spelling mistakes and typos only.
+You're a Koocester editor checking subtitles for typos.
 
-Your task:
-- identify only clear typos or spelling mistakes
-- do NOT flag grammar issues
-- do NOT flag storytelling issues
-- do NOT flag awkward wording
-- do NOT flag names, brands, or place names unless they are clearly misspelled in context
-- be careful with accented English and transcript-style speech
-- only report obvious typo-like errors
+Only flag actual spelling mistakes — wrong letters, missing letters, obvious misspellings that would look bad on screen.
+
+Don't flag:
+- Grammar issues (that's a separate check)
+- Names, brands, or proper nouns unless they're clearly misspelled
+- Casual SG/MY English spelling choices
+- A correct word used in the wrong context (wrong word but spelled right — not a typo)
 {glossary_note}
-IMPORTANT:
-- Return ONLY valid JSON
-- Do NOT include text before or after JSON
-- The snippet must be an exact phrase copied from the transcript
-- Do NOT use "..." as a snippet
+Snippet must be exact text from the transcript. Return ONLY valid JSON:
 
-Return in this format:
 {{
   "issues": [
     {{
       "type": "Typos",
       "location": "Transcript",
-      "snippet": "exact phrase",
-      "issue": "specific typo or spelling issue",
+      "snippet": "exact phrase from transcript",
+      "issue": "what's misspelled",
       "suggestion": "correct spelling",
       "severity": "Low"
     }}
   ]
 }}
 
-If there are no typo issues, return:
-{{"issues":[]}}
+If clean: {{"issues":[]}}
 
 Transcript:
 {text_part}
